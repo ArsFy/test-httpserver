@@ -1,10 +1,12 @@
 package main
 
 import (
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
+	"os"
 	"strings"
 )
 
@@ -43,12 +45,12 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 		fmt.Printf("File Size: %+v\n", handler.Size)
 		hb, _ := json.Marshal(handler.Header)
 		fmt.Printf("MIME Header: %s\n", string(hb))
-		tempFile, _ := ioutil.TempFile("temp", handler.Filename)
+		tempFile, _ := os.CreateTemp("temp", handler.Filename)
 		if err != nil {
 			fmt.Println(err)
 		}
 		defer tempFile.Close()
-		fileBytes, err := ioutil.ReadAll(file)
+		fileBytes, err := io.ReadAll(file)
 		if err != nil {
 			fmt.Println(err)
 		}
@@ -63,5 +65,22 @@ func main() {
 	http.HandleFunc("/", indexHandler)
 
 	fmt.Println("Server Starting...")
+
+	go func() {
+		_, crt := os.Stat("server.crt")
+		_, key := os.Stat("server.key")
+		if crt == nil && key == nil {
+			cert, err := tls.LoadX509KeyPair("server.crt", "server.key")
+			if err != nil {
+				panic(err)
+			}
+			server := &http.Server{
+				Addr:      ":8443",
+				TLSConfig: &tls.Config{Certificates: []tls.Certificate{cert}},
+			}
+			server.ListenAndServeTLS("", "")
+		}
+	}()
+
 	http.ListenAndServe(":8000", nil)
 }
